@@ -45,15 +45,31 @@ export default function NovaConsultaPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
               Fontes consultadas
             </p>
-            <ul className="mt-3 space-y-2 text-sm text-slate-600">
-              {["BNMP / Mandados de Prisão", "DataJud / Tribunais", "JusBrasil", "Antecedentes públicos"].map(
-                (source) => (
-                  <li key={source} className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
-                    {source}
-                  </li>
-                ),
-              )}
+            <p className="mt-2 text-xs leading-relaxed text-slate-500">
+              O relatório consulta as bases abaixo. Cada fonte informa seu status individualmente.
+            </p>
+            <ul className="mt-3 space-y-3 text-sm text-slate-600">
+              <li className="flex items-start gap-2">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400" />
+                <div>
+                  <span className="font-medium">BNMP</span>
+                  <p className="text-xs text-slate-400">Mandados de prisão ativos (requer credenciamento PDPJ-Br)</p>
+                </div>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-300" />
+                <div>
+                  <span className="font-medium">JusBrasil</span>
+                  <p className="text-xs text-slate-400">Dados processuais (API comercial — requer contratação)</p>
+                </div>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-300" />
+                <div>
+                  <span className="font-medium">Antecedentes públicos</span>
+                  <p className="text-xs text-slate-400">Certidão oficial (requer autorização do titular)</p>
+                </div>
+              </li>
             </ul>
           </Card>
         </div>

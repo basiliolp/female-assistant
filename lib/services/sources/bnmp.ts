@@ -4,171 +4,115 @@ import { httpFetch } from "./http-client";
 /**
  * BNMP 3.0 — Banco Nacional de Medidas Penais e Prisões (CNJ)
  *
- * Cadastro nacional de mandados de prisão, medidas penais e alvarás de soltura.
+ * Fonte oficial de mandados de prisão, medidas penais e alvarás de soltura.
  * Mantido pelo Conselho Nacional de Justiça (CNJ).
  *
- * Acesso público:
- *   - Portal web: https://portalbnmp.cnj.jus.br/ (consulta por nome, sem auth)
- *   - API PDPJ-Br: requer token de acesso institucional
+ * ── Formas de acesso ──
  *
- * Docs: https://brazilvisible.org/docs/apis/poder-judiciario-cnj/bnmp/
+ * 1. Portal web público (https://portalbnmp.cnj.jus.br/)
+ *    → Consulta por nome sem autenticação (interface Angular SPA)
+ *    → Mandados sigilosos NÃO são exibidos
+ *
+ * 2. API PDPJ-Br (acesso institucional)
+ *    → Autenticação: token OAuth2 via Gov.br
+ *    → Endpoint: https://api.bnmp-integracao.stg.cloud.pje.jus.br/
+ *    → Docs: https://docs.pdpj.jus.br/servicos-negociais/bnmp/
+ *
+ * A integração abaixo usa a API PDPJ-Br quando BNMP_API_KEY está configurada.
+ * Sem a chave, a fonte retorna indisponível com orientações.
  */
 
-// ———————————————————————————— Configuração ————————————————————————————
-
-const BNMP_API_BASE = process.env.BNMP_API_URL ?? "https://portalbnmp.cnj.jus.br";
+const BNMP_API_BASE =
+  process.env.BNMP_API_URL ?? "https://api.bnmp-integracao.stg.cloud.pje.jus.br";
 const BNMP_API_KEY = process.env.BNMP_API_KEY ?? "";
 
-const WARRANT_TYPES: Record<string, string> = {
-  PRISAO_PREVENTIVA: "Prisão preventiva",
-  PRISAO_TEMPORARIA: "Prisão temporária",
-  PRISAO_CONDENATORIA: "Prisão condenatória (sentença definitiva)",
-  PRISAO_CIVIL_ALIMENTOS: "Prisão civil (pensão alimentícia)",
-  INTERNACAO: "Internação (medida de segurança)",
-};
-
-type BnmpRecord = {
-  nome: string;
-  documento?: string;
-  dataNascimento?: string;
-  nomeMae?: string;
-  tipoMandado: string;
-  numeroMandado: string;
-  numeroProcesso?: string;
-  dataExpedicao: string;
-  dataValidade?: string;
-  orgaoExpedidor: string;
-  uf: string;
-  situacao: string;
-};
-
 /**
- * Gera uma simulação inteligente que usa os dados reais fornecidos
- * para produzir resultados mais coerentes. Quanto mais dados a usuária
- * informar, mais específicos e realistas serão os resultados simulados.
- */
-function simulateSearch(input: SearchInput): SourceResult {
-  const findings: SourceFinding[] = [];
-  const nameParts = input.subjectName.trim().split(/\s+/);
-  const lastName = nameParts[nameParts.length - 1]?.toLowerCase() ?? "";
-  const hasCpf = input.subjectCpf && input.subjectCpf.replace(/\D/g, "").length === 11;
-  const hasBirthDate = Boolean(input.birthDate);
-
-  // Calcula "seed" determinístico a partir dos dados para gerar simulação consistente
-  const seed = input.subjectName.length + (hasCpf ? 100 : 0) + (hasBirthDate ? 50 : 0);
-  const shouldAlert = (seed % 7) < 3; // ~43% dos nomes geram alerta na simulação
-
-  if (shouldAlert) {
-    const isHighRisk = (seed % 5) < 2;
-    const severity = isHighRisk ? "critical" as const : "warning" as const;
-
-    findings.push({
-      source: "BNMP / CNJ",
-      category: isHighRisk ? "Mandado de prisão" : "Medida penal",
-      title: isHighRisk
-        ? "Mandado de prisão ativo encontrado"
-        : "Registro de medida penal",
-      description: isHighRisk
-        ? `Mandado de prisão do tipo preventivo registrado no BNMP em nome de ${input.subjectName}. Órgão expedidor: Tribunal de Justiça. Situação: Aguardando cumprimento.`
-        : `Medida cautelar diversa da prisão registrada em nome de ${input.subjectName}. Recomenda-se verificar situação atualizada no portal do BNMP.`,
-      severity,
-      date: isHighRisk ? "2025-03-15" : "2024-11-20",
-      url: "https://portalbnmp.cnj.jus.br/",
-      // Passa dados da pessoa para o motor de matching
-      personName: input.subjectName,
-      personCpf: input.subjectCpf ?? undefined,
-      personBirthDate: input.birthDate ?? undefined,
-      personMotherName: input.motherName ?? undefined,
-    });
-  }
-
-  return {
-    source: "BNMP / CNJ",
-    status: "success",
-    findings,
-    message:
-      findings.length === 0
-        ? "Nenhum mandado de prisão ou medida penal ativa encontrada para o nome consultado."
-        : undefined,
-  };
-}
-
-/**
- * Consulta a API real do BNMP via PDPJ-Br.
- * Usa nome + CPF + data de nascimento + nome da mãe quando disponíveis.
+ * Consulta a API PDPJ-Br do BNMP.
+ * Requer token de autenticação institucional.
  */
 async function realSearch(input: SearchInput): Promise<SourceResult> {
   const findings: SourceFinding[] = [];
 
-  // Monta query combinando todos os dados disponíveis
-  const must: Record<string, unknown>[] = [];
+  // Monta payload com todos os dados disponíveis
+  const searchPayload: Record<string, unknown> = {};
 
-  // Nome é obrigatório
+  // Nome é o campo básico de busca
   if (input.subjectName) {
-    must.push({ match: { nome: input.subjectName } });
+    searchPayload.nome = input.subjectName;
   }
 
-  // CPF é o campo mais preciso — priority match
+  // CPF aumenta drasticamente a precisão
   if (input.subjectCpf) {
-    must.push({ match: { documento: input.subjectCpf.replace(/\D/g, "") } });
+    searchPayload.cpf = input.subjectCpf.replace(/\D/g, "");
   }
 
-  const searchPayload: Record<string, unknown> = {
-    query: {
-      bool: {
-        must,
-        ...(input.motherName
-          ? { filter: [{ match: { nomeMae: input.motherName } }] }
-          : {}),
-      },
-    },
-    size: 20,
-  };
+  // Campos adicionais para refinamento
+  if (input.motherName) {
+    searchPayload.nomeMae = input.motherName;
+  }
 
   const result = await httpFetch<{
-    hits: { hits: Array<{ _source: BnmpRecord }> };
-  }>(`${BNMP_API_BASE}/api/v1/mandados/_search`, {
+    content?: Array<{
+      nome: string;
+      cpf?: string;
+      dataNascimento?: string;
+      nomeMae?: string;
+      tipoMandado: string;
+      numeroMandado: string;
+      numeroProcesso?: string;
+      dataExpedicao: string;
+      dataValidade?: string;
+      orgaoExpedidor: string;
+      uf: string;
+      situacao: string;
+    }>;
+  }>(`${BNMP_API_BASE}/api/v1/mandados`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${BNMP_API_KEY}` },
+    headers: {
+      Authorization: `Bearer ${BNMP_API_KEY}`,
+    },
     body: searchPayload,
-    timeout: 8_000,
+    timeout: 10_000,
   });
 
   if (!result.ok || !result.data) {
-    console.warn(`[BNMP] API indisponível (${result.error}), usando fallback simulado`);
-    return simulateSearch(input);
+    return {
+      source: "BNMP / CNJ",
+      status: "unavailable",
+      findings: [],
+      message: `API do BNMP indisponível (${result.error ?? "erro de conexão"}). Verifique se a chave de acesso PDPJ-Br está configurada corretamente.`,
+    };
   }
 
-  const records = result.data.hits?.hits ?? [];
+  const records = result.data.content ?? [];
 
-  for (const record of records.map((r) => r._source)) {
-    const warrantTypeLabel =
-      WARRANT_TYPES[record.tipoMandado] ?? record.tipoMandado ?? "Mandado de prisão";
-    const isActive = record.situacao?.toLowerCase().includes("aguardando");
+  for (const record of records) {
+    const isActive = record.situacao?.toLowerCase().includes("aguardando") ||
+      record.situacao?.toLowerCase().includes("ativo");
 
     findings.push({
       source: "BNMP / CNJ",
-      category: warrantTypeLabel,
+      category: record.tipoMandado ?? "Mandado de prisão",
       title: isActive
         ? "Mandado ativo — Aguardando cumprimento"
-        : "Registro de mandado",
+        : "Registro de mandado (cumprido/revogado)",
       description: [
         `Mandado: ${record.numeroMandado}`,
         record.numeroProcesso ? `Processo: ${record.numeroProcesso}` : null,
-        `Órgão: ${record.orgaoExpedidor} (${record.uf})`,
+        `Órgão expedidor: ${record.orgaoExpedidor} (${record.uf})`,
         `Expedição: ${record.dataExpedicao}`,
+        record.dataValidade ? `Validade: ${record.dataValidade}` : null,
         isActive
-          ? "⚠️ Este mandado está ativo e aguardando cumprimento."
-          : "Registro histórico de mandado já cumprido ou revogado.",
+          ? "⚠️ Mandado ativo — aguardando cumprimento."
+          : "Registro histórico de mandado.",
       ]
         .filter(Boolean)
         .join(". "),
       severity: isActive ? "critical" : "warning",
       date: record.dataExpedicao,
       url: "https://portalbnmp.cnj.jus.br/",
-      // Passa dados estruturados da pessoa para o match engine
       personName: record.nome,
-      personCpf: record.documento,
+      personCpf: record.cpf,
       personBirthDate: record.dataNascimento,
       personMotherName: record.nomeMae,
     });
@@ -180,7 +124,7 @@ async function realSearch(input: SearchInput): Promise<SourceResult> {
     findings,
     message:
       findings.length === 0
-        ? "Nenhum mandado de prisão ativo ou registro encontrado nos sistemas consultados."
+        ? "Nenhum mandado de prisão ativo ou registro encontrado no BNMP para os dados informados."
         : undefined,
   };
 }
@@ -190,15 +134,20 @@ async function realSearch(input: SearchInput): Promise<SourceResult> {
 export const bnmpSource: PublicDataSource = {
   id: "bnmp",
   name: "BNMP / Mandados de Prisão",
-  description: "Banco Nacional de Mandados de Prisão do CNJ — mandados ativos, medidas penais e alvarás",
+  description: "Banco Nacional de Mandados de Prisão do CNJ (via PDPJ-Br)",
 
   async search(input: SearchInput): Promise<SourceResult> {
-    if (BNMP_API_KEY) {
-      return realSearch(input);
+    if (!BNMP_API_KEY) {
+      return {
+        source: "BNMP / CNJ",
+        status: "unavailable",
+        findings: [],
+        message:
+          "Consulta ao BNMP requer credenciamento PDPJ-Br. " +
+          "Para obter acesso, solicite credenciais junto ao CNJ em docs.pdpj.jus.br. " +
+          "Enquanto isso, consulte manualmente em portalbnmp.cnj.jus.br.",
+      };
     }
-    const simulated = simulateSearch(input);
-    simulated.message = (simulated.message ?? "") +
-      " [API BNMP não configurada — resultados simulados. Configure BNMP_API_KEY para dados reais.]";
-    return simulated;
+    return realSearch(input);
   },
 };

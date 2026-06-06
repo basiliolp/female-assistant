@@ -307,7 +307,12 @@ export default async function ConsultaDetalhePage({ params }: Params) {
               <Database className="h-4 w-4 text-slate-400" />
               <h2 className="font-bold text-slate-900">Fontes consultadas</h2>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {sources.length === 0 && (
+                <p className="col-span-full text-sm text-slate-500">
+                  Nenhuma fonte foi consultada.
+                </p>
+              )}
               {sources.map(
                 (
                   s: { name: string; status: string; message?: string },
@@ -315,24 +320,37 @@ export default async function ConsultaDetalhePage({ params }: Params) {
                 ) => (
                   <div
                     key={i}
-                    className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 text-sm"
-                  >
-                    <span className="font-medium text-slate-700">{s.name}</span>
-                    <span
-                      className={
-                        s.status === "success"
-                          ? "text-emerald-600"
-                          : s.status === "error"
-                            ? "text-red-500"
-                            : "text-slate-400"
-                      }
-                    >
-                      {s.status === "success"
-                        ? "OK"
+                    className={
+                      s.status === "success"
+                        ? "rounded-xl border border-emerald-200/60 bg-emerald-50/60 px-4 py-3 text-sm"
                         : s.status === "unavailable"
-                          ? "Indisponível"
-                          : s.status}
-                    </span>
+                          ? "rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm"
+                          : "rounded-xl border border-red-200/60 bg-red-50/60 px-4 py-3 text-sm"
+                    }
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-slate-700">{s.name}</span>
+                      <span
+                        className={
+                          s.status === "success"
+                            ? "text-xs font-semibold text-emerald-600"
+                            : s.status === "unavailable"
+                              ? "text-xs font-semibold text-slate-400"
+                              : "text-xs font-semibold text-red-500"
+                        }
+                      >
+                        {s.status === "success"
+                          ? "OK"
+                          : s.status === "unavailable"
+                            ? "Indisponível"
+                            : s.status}
+                      </span>
+                    </div>
+                    {s.message && (
+                      <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                        {s.message}
+                      </p>
+                    )}
                   </div>
                 ),
               )}
