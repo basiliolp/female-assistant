@@ -69,6 +69,23 @@ export default async function ConsultasPage() {
                     CPF {maskCpf(c.subjectCpf)} ·{" "}
                     {format(c.createdAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                   </p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {c.subjectCpf && (
+                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                        CPF
+                      </span>
+                    )}
+                    {c.birthDate && (
+                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                        Nascimento
+                      </span>
+                    )}
+                    {c.motherName && (
+                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                        Mãe
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <ChannelBadge channel={c.channel} />

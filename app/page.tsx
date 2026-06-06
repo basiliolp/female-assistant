@@ -92,7 +92,7 @@ export default function HomePage() {
                 <div className="space-y-3">
                   <div className="rounded-xl border border-red-100 bg-red-50/80 p-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-red-600">
-                      SINESP Cidadão
+                      BNMP / CNJ
                     </p>
                     <p className="mt-1 font-medium text-slate-900">Mandado de prisão em aberto</p>
                     <p className="mt-1 text-sm text-slate-600">
@@ -135,7 +135,7 @@ export default function HomePage() {
               {
                 icon: Search,
                 title: "Relatório unificado",
-                text: "Nome, CPF e data de nascimento consultados em JusBrasil, SINESP, tribunais e outras fontes públicas — tudo em um só lugar.",
+                text: "Nome, CPF e data de nascimento consultados em BNMP, DataJud, JusBrasil e outras fontes públicas — tudo em um só lugar.",
                 span: "lg:col-span-2",
               },
               {

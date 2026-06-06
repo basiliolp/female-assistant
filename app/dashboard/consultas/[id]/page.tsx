@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ArrowLeft, ExternalLink, Shield, Database } from "lucide-react";
+import { ArrowLeft, ExternalLink, Shield, Database, Search, Fingerprint, XCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { ChannelBadge } from "@/components/channel-badge";
 import { RiskBadge } from "@/components/risk-badge";
+import { ConfidenceBadge } from "@/components/confidence-badge";
+import { MatchBadge } from "@/components/match-badge";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { maskCpf } from "@/lib/utils";
@@ -32,7 +34,10 @@ export default async function ConsultaDetalhePage({ params }: Params) {
     return (
       <Card className="text-center">
         <p className="text-slate-600">Consulta não encontrada.</p>
-        <Link href="/dashboard/consultas" className="mt-4 inline-block text-sm font-semibold text-rose-600">
+        <Link
+          href="/dashboard/consultas"
+          className="mt-4 inline-block text-sm font-semibold text-rose-600"
+        >
           Voltar ao histórico
         </Link>
       </Card>
@@ -42,7 +47,26 @@ export default async function ConsultaDetalhePage({ params }: Params) {
   const findings: SourceFinding[] = consultation.report
     ? JSON.parse(consultation.report.findings)
     : [];
-  const sources = consultation.report ? JSON.parse(consultation.report.sources) : [];
+  const rawSources = consultation.report ? JSON.parse(consultation.report.sources) : [];
+
+  // Extrai dados de confiança das fontes (entrada especial __confidence__)
+  const confidenceEntry = rawSources.find((s: { id: string }) => s.id === "__confidence__");
+  const confidenceInfo = confidenceEntry
+    ? { level: confidenceEntry.status, ...JSON.parse(confidenceEntry.message) }
+    : null;
+
+  // Filtra a entrada de confiança das fontes regulares
+  const sources = rawSources.filter(
+    (s: { id: string }) => s.id !== "__confidence__",
+  );
+
+  // Dados informados na consulta
+  const fieldsProvided = [
+    "nome",
+    ...(consultation.subjectCpf ? ["CPF"] : []),
+    ...(consultation.birthDate ? ["data de nascimento"] : []),
+    ...(consultation.motherName ? ["nome da mãe"] : []),
+  ];
 
   return (
     <div className="space-y-6">
@@ -54,6 +78,7 @@ export default async function ConsultaDetalhePage({ params }: Params) {
         Voltar ao histórico
       </Link>
 
+      {/* Header */}
       <div className="glass-strong rounded-2xl p-6 lg:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -64,7 +89,9 @@ export default async function ConsultaDetalhePage({ params }: Params) {
               CPF {maskCpf(consultation.subjectCpf)}
               {consultation.birthDate && ` · Nasc. ${consultation.birthDate}`}
               {" · "}
-              {format(consultation.createdAt, "dd MMM yyyy 'às' HH:mm", { locale: ptBR })}
+              {format(consultation.createdAt, "dd MMM yyyy 'às' HH:mm", {
+                locale: ptBR,
+              })}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -74,10 +101,24 @@ export default async function ConsultaDetalhePage({ params }: Params) {
             )}
           </div>
         </div>
+
+        {/* Dados fornecidos */}
+        <div className="mt-4 flex flex-wrap gap-2">
+          {fieldsProvided.map((field) => (
+            <span
+              key={field}
+              className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600"
+            >
+              <Search className="mr-1 h-3 w-3" />
+              {field}
+            </span>
+          ))}
+        </div>
       </div>
 
       {consultation.report ? (
         <>
+          {/* Resumo do relatório */}
           <Card
             variant="strong"
             className={
@@ -99,6 +140,105 @@ export default async function ConsultaDetalhePage({ params }: Params) {
             </div>
           </Card>
 
+          {/* Nível de confiança na identificação */}
+          {confidenceInfo && (
+            <Card
+              variant="strong"
+              className={
+                confidenceInfo.level === "NONE"
+                  ? "border-red-200/60 bg-gradient-to-br from-red-50/60 to-rose-50/30"
+                  : confidenceInfo.level === "LOW"
+                    ? "border-amber-200/60 bg-gradient-to-br from-amber-50/60 to-orange-50/30"
+                    : "border-slate-200/60 bg-gradient-to-br from-slate-50/60 to-blue-50/30"
+              }
+            >
+              <div className="flex gap-3">
+                <Search className="h-5 w-5 shrink-0 text-slate-600" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="font-bold text-slate-900">
+                      Precisão da identificação
+                    </h2>
+                    <ConfidenceBadge
+                      level={confidenceInfo.level}
+                      size="md"
+                    />
+                  </div>
+                  <p className="mt-2 leading-relaxed text-slate-700">
+                    {confidenceInfo.description}
+                  </p>
+
+                  {/* Estatísticas de matching por finding */}
+                  {findings.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-3">
+                      {(() => {
+                        const confirmed = findings.filter(
+                          (f: SourceFinding) => f.matchConfidence === "confirmed",
+                        ).length;
+                        const strong = findings.filter(
+                          (f: SourceFinding) => f.matchConfidence === "strong",
+                        ).length;
+                        const weak = findings.filter(
+                          (f: SourceFinding) =>
+                            f.matchConfidence === "weak" || f.matchConfidence === "unknown",
+                        ).length;
+                        return (
+                          <>
+                            {confirmed > 0 && (
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200/80">
+                                <Fingerprint className="h-3 w-3" />
+                                {confirmed} confirmado(s)
+                              </span>
+                            )}
+                            {strong > 0 && (
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 ring-1 ring-blue-200/80">
+                                <Shield className="h-3 w-3" />
+                                {strong} forte(s)
+                              </span>
+                            )}
+                            {weak > 0 && (
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 ring-1 ring-orange-200/80">
+                                <XCircle className="h-3 w-3" />
+                                {weak} fraco(s)
+                              </span>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {confidenceInfo.fieldsMissing?.length > 0 && (
+                    <div className="mt-3 rounded-xl border border-amber-200/60 bg-amber-50/40 px-4 py-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                        Dados que aumentariam a precisão
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {confidenceInfo.fieldsMissing.map(
+                          (field: string) => (
+                            <span
+                              key={field}
+                              className="inline-flex items-center rounded-full bg-amber-100/80 px-2.5 py-0.5 text-xs font-medium text-amber-700"
+                            >
+                              {field === "CPF"
+                                ? "CPF"
+                                : field === "data de nascimento"
+                                  ? "Data de nascimento"
+                                  : field === "nome da mãe"
+                                    ? "Nome da mãe"
+                                    : field}
+                            </span>
+                          ),
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Registros encontrados */}
           <Card variant="strong">
             <h2 className="mb-5 text-lg font-bold text-slate-900">
               Registros encontrados
@@ -115,18 +255,25 @@ export default async function ConsultaDetalhePage({ params }: Params) {
                 {findings.map((f, i) => {
                   const s = severityConfig[f.severity] ?? severityConfig.info;
                   return (
-                    <div
-                      key={i}
-                      className={`rounded-xl border p-5 ${s.card}`}
-                    >
+                    <div key={i} className={`rounded-xl border p-5 ${s.card}`}>
                       <div className="flex items-start gap-3">
-                        <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${s.dot}`} />
+                        <span
+                          className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${s.dot}`}
+                        />
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="font-bold text-slate-900">{f.title}</p>
-                            <span className="text-xs font-semibold text-slate-400">
-                              {f.source}
-                            </span>
+                            <div className="flex flex-wrap items-center gap-2">
+                              {(f as SourceFinding).matchConfidence && (
+                                <MatchBadge
+                                  confidence={(f as SourceFinding).matchConfidence!}
+                                  score={(f as SourceFinding).matchScore}
+                                />
+                              )}
+                              <span className="text-xs font-semibold text-slate-400">
+                                {f.source}
+                              </span>
+                            </div>
                           </div>
                           <p className="mt-0.5 text-xs font-medium uppercase tracking-wide text-slate-500">
                             {f.category}
@@ -154,6 +301,7 @@ export default async function ConsultaDetalhePage({ params }: Params) {
             )}
           </Card>
 
+          {/* Fontes consultadas */}
           <Card>
             <div className="mb-4 flex items-center gap-2">
               <Database className="h-4 w-4 text-slate-400" />
@@ -161,7 +309,10 @@ export default async function ConsultaDetalhePage({ params }: Params) {
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
               {sources.map(
-                (s: { name: string; status: string; message?: string }, i: number) => (
+                (
+                  s: { name: string; status: string; message?: string },
+                  i: number,
+                ) => (
                   <div
                     key={i}
                     className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 text-sm"

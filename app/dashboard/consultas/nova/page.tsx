@@ -46,7 +46,7 @@ export default function NovaConsultaPage() {
               Fontes consultadas
             </p>
             <ul className="mt-3 space-y-2 text-sm text-slate-600">
-              {["SINESP Cidadão", "Tribunais / DataJud", "JusBrasil", "Antecedentes públicos"].map(
+              {["BNMP / Mandados de Prisão", "DataJud / Tribunais", "JusBrasil", "Antecedentes públicos"].map(
                 (source) => (
                   <li key={source} className="flex items-center gap-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />

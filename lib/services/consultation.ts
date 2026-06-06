@@ -34,6 +34,22 @@ export async function createAndProcessConsultation(input: CreateConsultationInpu
       motherName: input.motherName,
     });
 
+    // Adiciona os dados de confiança junto às fontes para uso na UI
+    const enrichedSources = [
+      ...report.sources,
+      {
+        id: "__confidence__",
+        name: "Confiança",
+        status: report.confidence.level,
+        message: JSON.stringify({
+          label: report.confidence.label,
+          description: report.confidence.description,
+          fieldsProvided: report.confidence.fieldsProvided,
+          fieldsMissing: report.confidence.fieldsMissing,
+        }),
+      },
+    ];
+
     await prisma.$transaction([
       prisma.report.create({
         data: {
@@ -41,7 +57,7 @@ export async function createAndProcessConsultation(input: CreateConsultationInpu
           summary: report.summary,
           riskLevel: report.riskLevel,
           findings: JSON.stringify(report.findings),
-          sources: JSON.stringify(report.sources),
+          sources: JSON.stringify(enrichedSources),
         },
       }),
       prisma.consultation.update({
