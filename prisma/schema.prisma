@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Channel {
+  WEB
+  WHATSAPP
+}
+
+enum ConsultationStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  UNKNOWN
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String
+  name          String
+  phone         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  consultations Consultation[]
+  whatsappLinks WhatsAppLink[]
+}
+
+model WhatsAppLink {
+  id        String   @id @default(cuid())
+  userId    String
+  phone     String   @unique
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Consultation {
+  id          String             @id @default(cuid())
+  userId      String
+  channel     Channel            @default(WEB)
+  status      ConsultationStatus @default(PENDING)
+  subjectName String
+  subjectCpf  String?
+  birthDate   String?
+  motherName  String?
+  externalRef String?
+  errorMsg    String?
+  createdAt   DateTime           @default(now())
+  completedAt DateTime?
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  report      Report?
+
+  @@index([userId, createdAt])
+  @@index([channel])
+}
+
+model Report {
+  id             String       @id @default(cuid())
+  consultationId String       @unique
+  summary        String
+  riskLevel      RiskLevel    @default(UNKNOWN)
+  findings       String
+  sources        String
+  createdAt      DateTime     @default(now())
+  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+}
